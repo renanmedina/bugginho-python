@@ -1,22 +1,35 @@
+# import required modules
 import os;
 import getpass as passExtractor;
 import sqlite3 as sqlite;
 import time;
+import re as regex;
+from datetime import datetime;
+import locale;
 
+# declare ATM Class
 class ATM:
-  
+  # ATM Class control fields
   account = None; 
+  # db connection
   dbcon = None;
+  # current action choosen
   act_option = 1;
 
   def initialize(self):
+    locale.setlocale(locale.LC_ALL, '');
     self.connectDB();
     if self.account is None:
       self.requestAuth();
     else:
       while(self.act_option < 8):
         self.drawMenu();
-        self.act_option = int(input("Escolha uma opção [ENTER]: "));
+        self.act_option = input("Escolha uma opção [ENTER]: ");
+        if(self.act_option == ''):
+          self.act_option = 0;
+          continue;
+        else:
+          self.act_option = int(self.act_option);
         if(self.act_option > 8 or self.act_option < 0):
           print(" Opção não disponível, favor selecione uma opção entre as listadas.")
           time.sleep(1);
@@ -38,11 +51,11 @@ class ATM:
         elif(self.act_option == 7):
           self.editPersonalInfo();
         else:
-          print(" Obrigado pela visita, "+self.account["user_fullname"]+". Volte sempre !!");
-          time.sleep(2);
+          self.logout();
+          time.sleep(1);
 
   def drawWelcome(self):
-    os.system("clear");
+    self.clearScreen();
     print("=====================================================================================");
     print("                                   PyLanguage ATM                                    ");
     print("=====================================================================================");
@@ -68,19 +81,22 @@ class ATM:
     """);
 
   def displayBalance(self):
-    os.system("clear");
+    self.clearScreen();
     print("---------------------------------------------------------------------------------------------");
     print("               PyLanguage ATM - Saldo de conta corrente (Ag: "+self.account["agency"]+" C/C:"+self.account["number"]+")");
     print("---------------------------------------------------------------------------------------------");
     print(" * Saldo atual: "+str(self.account["balance"]));
     print("---------------------------------------------------------------------------------------------");
     input("Pressione [ENTER] para continuar ...");
-  
+
+
   def displayHistory(self):
-    os.system("clear");
+    self.clearScreen();
     print("----------------------------------------------------------------------------------------------");
     print("               PyLanguage ATM - Extrato de conta corrente (Ag: "+self.account["agency"]+" C/C:"+self.account["number"]+")");
     print("----------------------------------------------------------------------------------------------");
+    print("        Data        \t           Tipo            \t          Valor");
+    print("==============================================================================================");
     cursor = self.dbcon.cursor();
     cursor.execute("""
       SELECT moviment_date, moviment_type, moviment_value FROM atm_moviment 
@@ -89,7 +105,6 @@ class ATM:
       ORDER BY moviment_date DESC
     """);
     hists = cursor.fetchall();
-    print(" Data      \t      Tipo      \t      Valor");
     for mov in hists:
       movtip = str(mov[1]);
       if(movtip == 'D'):
@@ -100,7 +115,11 @@ class ATM:
         movtip = 'Transferência outra c/c';
       elif(movtip == 'S'):
         movtip = 'Saque';
-      print(" "+str(mov[0])+"      \t      "+movtip+"      \t      "+str(mov[2]));
+
+      dt_reg = regex.match(r"([0-9]{4})-([0-9]{2})-([0-9]{2}) ([0-9]{2}:[0-9]{2}:[0-9]{2})", str(mov[0]));
+      dt_mov = dt_reg.group(3)+"/"+dt_reg.group(2)+"/"+dt_reg.group(1)+" "+dt_reg.group(4);
+      mov_val =locale.currency(mov[2], grouping=True);
+      print(" "+dt_mov+"      \t"+movtip.ljust(19)+"      \t"+mov_val);
     print("-----------------------------------------------------------------------------------------------");
     print(" Total de "+str(len(hists))+" registros\n");
     input(" Pressione [ENTER] para continuar ...");
@@ -122,7 +141,7 @@ class ATM:
     auth_ag = str(input(" Informe sua agência: "));
     auth_account = str(input(" Informe sua c/c: "));
     auth_pwd = str(passExtractor.getpass());
-    print("\n Validando informações, aguade ...");
+    print("\n => Validando informações, aguade ...");
     time.sleep(2);
     # check if authentication succeds
     if self.authenticate(auth_ag, auth_account, auth_pwd):
@@ -132,7 +151,23 @@ class ATM:
       time.sleep(3);
       self.initialize();
       
-
+  def logout(self):
+     self.clearScreen();
+     print("----------------------------------------------------------------------------------------------");
+     print("                      PyLanguage ATM - sair (Ag: "+self.account["agency"]+" C/C:"+self.account["number"]+")");
+     print("----------------------------------------------------------------------------------------------");
+     conf_logout = 'x';
+     while(conf_logout != 'S' and conf_logout != 'N'):
+      print("\n"+self.account["user_fullname"]+" deseja realmente sair ?");
+      conf_logout = input("\nPressione [S/N]: ");
+      if(conf_logout == 'N'):
+        self.act_option = 0;
+      elif(conf_logout == 'S'):
+        self.closeDB();
+        print("Obrigado pela visita, volte sempre !");
+        time.sleep(1);
+    
+      
   def authenticate(self, ag, acc, pwd):
     cur = self.dbcon.cursor();
     cur.execute("""
@@ -157,11 +192,20 @@ class ATM:
 
   def connectDB(self):
     if(self.dbcon is None):
-      self.dbcon = sqlite.connect("atmdb.db");
+      self.dbcon = sqlite.connect("atmdb.db", detect_types=sqlite.PARSE_COLNAMES);
   
   def closeDB(self):
     self.dbcon.close();
-    
+  
+  def clearScreen(self):
+    if os.name == 'nt':
+      os.system('cls');
+    else:
+      os.system('clear');
+
+
+
+
 
     
   
